@@ -6,7 +6,11 @@ import nmap
 import datetime
 import requests
 import json
+import argparse
+import socket
 import os
+import re
+import IPy
 requests.packages.urllib3.disable_warnings()
 import sys 
 reload(sys) 
@@ -21,6 +25,8 @@ resultdir=os.getcwd()+os.path.sep+'result'+os.path.sep
 #调用masscan
 def massscan_scan(scan_ip):
     ports = [] #设定一个临时端口列表
+    #LINUX
+    #cmd='masscan ' + scan_ip + ' -p 1-65535 -oJ '+dstdir+scan_ip+'.json --rate 1000'
     cmd='masscan.exe ' + scan_ip + ' -p 1-65535 -oJ '+dstdir+scan_ip+'.json --rate 1000'
     os.system(cmd)
     #提取json文件中的端口
@@ -35,7 +41,7 @@ def massscan_scan(scan_ip):
     if len(ports) > 50:
         pass      #如果端口数量大于50，说明可能存在防火墙，属于误报，清空列表
     else:
-        nmap_scan(scan_ip,ports) #小于50则进一步侦查
+        nmap_scan(scan_ip,ports) 
 
 #调用nmap识别服务
 def nmap_scan(scan_ip,ports):
@@ -52,7 +58,44 @@ def nmap_scan(scan_ip,ports):
        print e
        pass
 
-def main():
+def getIPs(target):
+    iplist=[]
+    try:
+        if is_valid_domain(target):
+            iplist.append(socket.gethostbyname(target))
+        else:
+            ips=IPy.IP(target)
+            if ips:
+                if len(ips)>1:
+                    for ip in ips:
+                        iplist.append(str(ip))
+                else:
+                    iplist.append(str(ips))
+        return iplist
+    except Exception, e:
+        print 'IP is not legal'
+        sys.exit()
+        
+def IPsScan(target):
+    try:
+        for ip in target:
+            print '[+]start scan:'+ip
+            massscan_scan(ip)
+
+    except Exception as e:
+        print e
+        pass
+
+def is_valid_domain(value):
+    pattern = re.compile(
+        r'^(([a-zA-Z]{1})|([a-zA-Z]{1}[a-zA-Z]{1})|'
+        r'([a-zA-Z]{1}[0-9]{1})|([0-9]{1}[a-zA-Z]{1})|'
+        r'([a-zA-Z0-9][-_.a-zA-Z0-9]{0,61}[a-zA-Z0-9]))\.'
+        r'([a-zA-Z]{2,13}|[a-zA-Z0-9-]{2,30}.[a-zA-Z]{2,3})$'
+    )
+    return True if pattern.match(value) else False
+
+def readFile():
     try:
         with open('ip.txt', 'r') as f:
             for line in f.readlines():
@@ -64,9 +107,35 @@ def main():
         print e
         pass
 
+def usage():
+    usage = '''
+        python openthedoor.py  -t ip
+        
+        exp: python openthedoor.py -t 192.168.1.1
+             python openthedoor.py -t 192.168.1.1/24
+             python openthedoor.py -t domain
+             python openthedoor.py -f 
+
+        '''
+    print usage
 
 if __name__ =='__main__':
+        
     start_time = datetime.datetime.now()
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--target", help="IP address.")
+    parser.add_argument("-f", "--file",action='store_true', default=False, help="use ip.txt.")
+    args = parser.parse_args()
+
+    if args.target != None:
+        IPsScan(getIPs(args.target))
+    elif args.file:
+        readFile()
+    else:
+        usage()
+        sys.exit()
+
     spend_time = (datetime.datetime.now() - start_time).seconds
     print u'total time： ' + str(spend_time) + u'秒'
+
+
